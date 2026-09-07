@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canopy — a territory growing game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#11141a;
+    --panel-bg:#171b23;
+    --panel-line:#262c38;
+    --board-bg:#0c0e12;
+    --grid-line:#232834;
+    --blue:#4d8fdd;
+    --blue-dim:#2c4d78;
+    --red:#d6564a;
+    --red-dim:#7d332c;
+    --gold:#e0a95c;
+    --warn:#f2b544;
+    --text:#e8ecf1;
+    --text-dim:#8b93a3;
+    --text-faint:#5b6373;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:28px 16px 48px;
+  }
+  .wordmark{
+    font-family:'Space Grotesk',system-ui,sans-serif;
+    font-size:28px;
+    font-weight:700;
+    letter-spacing:0.01em;
+    color:var(--text);
+    margin:0;
+  }
+  .wordmark span{color:var(--gold);}
+  .subtitle{
+    color:var(--text-dim);
+    font-size:14px;
+    margin:4px 0 22px;
+  }
+  .layout{
+    display:flex;
+    gap:26px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .board-col{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .edge-label{
+    font-size:13px;
+    font-weight:600;
+    padding:6px 10px;
+    border-radius:3px;
+    width:fit-content;
+  }
+  .edge-label.top{
+    color:var(--red);
+    margin-bottom:6px;
+    border-left:3px solid var(--red);
+    padding-left:8px;
+  }
+  .edge-label.bottom{
+    color:var(--blue);
+    margin-top:6px;
+    border-left:3px solid var(--blue);
+    padding-left:8px;
+  }
+  #board{
+    display:grid;
+    grid-template-columns:repeat(30, 26px);
+    grid-template-rows:repeat(20, 26px);
+    background:var(--board-bg);
+    border:1px solid var(--panel-line);
+    user-select:none;
+    cursor:pointer;
+    transition:box-shadow 0.15s ease;
+  }
+  #board.shake{
+    animation:shake 0.28s ease;
+  }
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    20%{transform:translateX(-4px);}
+    40%{transform:translateX(4px);}
+    60%{transform:translateX(-3px);}
+    80%{transform:translateX(3px);}
+  }
+  .cell{
+    box-sizing:border-box;
+    border:1px solid var(--grid-line);
+    background:var(--board-bg);
+  }
+  .cell.edge-red-row{background:#14100f10;border-top-color:#3a2320;}
+  .cell.edge-blue-row{background:#0f121710;border-bottom-color:#1c3350;}
+  .cell.blue{background:var(--blue);border-color:var(--blue-dim);border-width:2px;}
+  .cell.red{background:var(--red);border-color:var(--red-dim);border-width:2px;}
+  .cell.last-move{box-shadow:inset 0 0 0 2px var(--gold);}
+  .cell.ghost-legal.ghost-blue{background:rgba(77,143,221,0.55);}
+  .cell.ghost-legal.ghost-red{background:rgba(214,86,74,0.55);}
+  .cell.ghost-legal{outline:2px solid var(--gold);outline-offset:-2px;position:relative;z-index:2;}
+  .cell.ghost-illegal{
+    outline:2px dashed #ff6a5e;
+    outline-offset:-2px;
+    position:relative;
+    z-index:2;
+    background-image:repeating-linear-gradient(45deg, rgba(255,90,80,0.28) 0 6px, rgba(0,0,0,0.18) 6px 12px);
+  }
+
+  .panel{
+    width:270px;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-line);
+    padding:18px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+  .panel h2{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13px;
+    font-weight:600;
+    color:var(--text-faint);
+    margin:0 0 10px;
+  }
+  .turn-indicator{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:16px;
+    font-weight:600;
+    padding:10px 12px;
+    border-radius:4px;
+    border-left:3px solid var(--text-faint);
+  }
+  .turn-indicator.blue{border-left-color:var(--blue);color:var(--blue);background:rgba(77,143,221,0.08);}
+  .turn-indicator.red{border-left-color:var(--red);color:var(--red);background:rgba(214,86,74,0.08);}
+  .turn-indicator.game-over{border-left-color:var(--gold);color:var(--gold);background:rgba(224,169,92,0.1);}
+  .turn-indicator.thinking{animation:pulse 1.1s ease-in-out infinite;}
+  @keyframes pulse{
+    0%,100%{opacity:1;}
+    50%{opacity:0.55;}
+  }
+  #board.board-disabled{pointer-events:none;opacity:0.72;cursor:default;}
+  .moves-sub{
+    font-size:12px;
+    color:var(--text-dim);
+    font-weight:400;
+    display:block;
+    margin-top:2px;
+  }
+
+  .score-block{display:flex;flex-direction:column;gap:10px;}
+  .score-row{display:flex;flex-direction:column;gap:4px;}
+  .score-row .label{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    font-weight:500;
+  }
+  .score-row .label .num{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:14px;
+  }
+  .bar-track{
+    height:8px;
+    background:#0c0e12;
+    border:1px solid var(--panel-line);
+    overflow:hidden;
+  }
+  .bar-fill{height:100%;transition:width 0.2s ease;}
+  .bar-fill.blue{background:var(--blue);}
+  .bar-fill.red{background:var(--red);}
+
+  .pieces-grid{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:6px;
+  }
+  .piece-btn{
+    background:#0e1116;
+    border:1px solid var(--panel-line);
+    color:var(--text-dim);
+    padding:8px 0 6px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    cursor:pointer;
+    font-family:'Space Grotesk',sans-serif;
+    border-radius:3px;
+  }
+  .piece-btn:hover{border-color:var(--text-faint);color:var(--text);}
+  .piece-btn.active{border-color:var(--gold);color:var(--gold);background:rgba(224,169,92,0.08);}
+  .piece-btn .size-label{font-size:15px;font-weight:700;}
+  .piece-btn .orient-label{font-size:11px;color:var(--text-faint);}
+  .piece-btn.active .orient-label{color:var(--gold);}
+
+  .btn-row{display:flex;gap:8px;}
+  .btn{
+    flex:1;
+    background:#0e1116;
+    border:1px solid var(--panel-line);
+    color:var(--text-dim);
+    padding:9px 4px;
+    cursor:pointer;
+    font-size:13px;
+    font-family:'Inter',sans-serif;
+    border-radius:4px;
+  }
+  .btn:hover{color:var(--text);border-color:var(--text-faint);}
+  .btn.confirm{color:var(--warn);border-color:var(--warn);}
+  .btn.new-game{color:var(--text);}
+  .btn:disabled{cursor:default;}
+  .btn:disabled:hover{color:var(--text-dim);border-color:var(--panel-line);}
+
+  .setup{border-top:1px solid var(--panel-line);border-bottom:1px solid var(--panel-line);padding:14px 0;}
+  .setup select{
+    width:100%;
+    background:#0e1116;
+    border:1px solid var(--panel-line);
+    color:var(--text);
+    padding:8px 8px;
+    border-radius:4px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;
+    margin-bottom:8px;
+  }
+  .setup select:hover{border-color:var(--text-faint);}
+  .bot-options{display:flex;flex-direction:column;}
+  .online-options{display:none;flex-direction:column;gap:8px;margin-bottom:8px;}
+  .online-row{display:flex;gap:6px;}
+  .online-row input[type="text"]{
+    flex:1;
+    min-width:0;
+    background:#0e1116;
+    border:1px solid var(--panel-line);
+    color:var(--text);
+    padding:8px 8px;
+    border-radius:4px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:13px;
+    letter-spacing:0.04em;
+  }
+  .online-row input[type="text"]:focus{outline:none;border-color:var(--text-faint);}
+  .online-row .btn{flex:none;padding:8px 12px;}
+  .claim-row{display:flex;gap:8px;}
+  .claim-row .btn{flex:1;}
+  #claimBlueBtn{color:var(--blue);border-color:var(--blue-dim);}
+  #claimRedBtn{color:var(--red);border-color:var(--red-dim);}
+  .setup-hint{font-size:11.5px;color:var(--text-faint);margin-top:-2px;}
+  .bot-tag{
+    font-size:10.5px;
+    font-weight:600;
+    color:var(--text-faint);
+    border:1px solid var(--panel-line);
+    border-radius:3px;
+    padding:1px 5px;
+    margin-left:7px;
+    vertical-align:middle;
+  }
+
+  .status-msg{
+    font-size:12.5px;
+    color:var(--warn);
+    min-height:16px;
+  }
+
+  details.rules{
+    font-size:12.5px;
+    color:var(--text-dim);
+    border-top:1px solid var(--panel-line);
+    padding-top:12px;
+  }
+  details.rules summary{
+    cursor:pointer;
+    color:var(--text-dim);
+    font-weight:500;
+    margin-bottom:8px;
+  }
+  details.rules summary:hover{color:var(--text);}
+  details.rules ul{margin:0;padding-left:18px;line-height:1.55;}
+  details.rules li{margin-bottom:6px;}
+  details.rules .hotkey{
+    display:inline-block;
+    background:#0e1116;
+    border:1px solid var(--panel-line);
+    border-radius:3px;
+    padding:0 5px;
+    font-family:'Space Grotesk',sans-serif;
+    color:var(--text);
+  }
+
+  @media (max-width:640px){
+    #board{
+      grid-template-columns:repeat(30, 16px);
+      grid-template-rows:repeat(20, 16px);
+    }
+    .panel{width:100%;max-width:420px;}
+  }
+</style>
+</head>
+<body>
+
+  <h1 class="wordmark">Canopy<span>.</span></h1>
+  <p class="subtitle">Grow your tree from your edge of the board. First to 100 area wins.</p>
+
+  <div class="layout">
+    <div class="board-col">
+      <div class="edge-label top">Red's edge</div>
+      <div id="board"></div>
+      <div class="edge-label bottom">Blue's edge</div>
+    </div>
+
+    <div class="panel">
+      <div>
+        <div id="turnIndicator" class="turn-indicator blue">Blue's move<span class="moves-sub" id="movesSub">1 placement left</span></div>
+        <div class="status-msg" id="statusMsg"></div>
+      </div>
+
+      <div class="score-block">
+        <div class="score-row">
+          <div class="label"><span style="color:var(--blue)">Blue<span class="bot-tag" id="blueBotTag"></span></span><span class="num" id="scoreBlueNum">0 / 100</span></div>
+          <div class="bar-track"><div class="bar-fill blue" id="scoreBlueBar" style="width:0%"></div></div>
+        </div>
+        <div class="score-row">
+          <div class="label"><span style="color:var(--red)">Red<span class="bot-tag" id="redBotTag"></span></span><span class="num" id="scoreRedNum">0 / 100</span></div>
+          <div class="bar-track"><div class="bar-fill red" id="scoreRedBar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Piece — hotkeys 1–5</h2>
+        <div class="pieces-grid" id="pieceButtons"></div>
+      </div>
+
+      <div class="setup">
+        <h2>Opponent</h2>
+        <select id="opponentSelect">
+          <option value="human">Two players</option>
+          <option value="bot">Computer</option>
+          <option value="online">Online (play a friend)</option>
+        </select>
+        <div id="botOptions" class="bot-options">
+          <select id="botColorSelect">
+            <option value="red">Bot plays Red</option>
+            <option value="blue">Bot plays Blue</option>
+          </select>
+          <select id="difficultySelect">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+        <div id="onlineOptions" class="online-options">
+          <div class="online-row">
+            <input type="text" id="roomInput" placeholder="Room code (blank = new room)" maxlength="16" autocomplete="off" spellcheck="false">
+            <button class="btn" id="joinRoomBtn">Join / Create</button>
+          </div>
+          <div id="roomLinkRow" class="online-row" style="display:none;">
+            <input type="text" id="roomLinkField" readonly>
+            <button class="btn" id="copyLinkBtn">Copy link</button>
+          </div>
+          <div id="claimRow" class="claim-row" style="display:none;">
+            <button class="btn" id="claimBlueBtn">Play Blue</button>
+            <button class="btn" id="claimRedBtn">Play Red</button>
+          </div>
+          <div class="setup-hint" id="onlineStatus">Not connected.</div>
+        </div>
+        <div class="setup-hint" id="setupModeHint">Hard plans ahead and defends its weak points. Applies on New game.</div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn" id="placeBtn">Place</button>
+        <button class="btn" id="undoBtn">Undo</button>
+        <button class="btn" id="passBtn">Pass</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn new-game" id="resetBtn">New game</button>
+      </div>
+
+      <details class="rules">
+        <summary>How to play</summary>
+        <ul>
+          <li>Move order is 1‑2‑2‑2‑2… Blue places one piece first, then each side alternates placing two pieces per turn.</li>
+          <li>Pick a piece with <span class="hotkey">1</span>–<span class="hotkey">5</span>. Press the same number again to rotate it.</li>
+          <li>A piece must touch your own edge (top for red, bottom for blue) or one of your existing pieces, sharing a full side — not just a corner.</li>
+          <li>If your new piece touches an opponent piece, the larger of the two is destroyed. Equal-sized pieces simply touch — nothing happens.</li>
+          <li>Destroying a piece also destroys any of that player's pieces that are no longer connected back to their edge.</li>
+          <li>You may not place a piece that would immediately be destroyed — the game blocks that click.</li>
+          <li>First to 100 total area wins.</li>
+          <li><span class="hotkey">Enter</span> or the Place button confirms a placement at the hovered square (useful on touch — tap to preview, then tap Place). <span class="hotkey">U</span> undoes a move.</li>
+          <li>Switch "Opponent" to Computer to play against a bot, pick which color it controls and a difficulty, then press New game.</li>
+          <li>Switch "Opponent" to Online, create a room, and send the room link to a friend. Each of you picks a color; moves sync automatically every second or two. Undo isn't available online, since it would rewrite a move your opponent already saw.</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  const COLS = 30, ROWS = 20;
+  const EDGE_ROW = { blue: ROWS - 1, red: 0 };
+
+  function cellFromPoint(clientX, clientY) {
+    const rect = boardEl.getBoundingClientRect();
+    const cellW = rect.width / COLS;
+    const cellH = rect.height / ROWS;
+    let c0 = Math.floor((clientX - rect.left) / cellW);
+    let r0 = Math.floor((clientY - rect.top) / cellH);
+    r0 = Math.max(0, Math.min(ROWS - 1, r0));
+    c0 = Math.max(0, Math.min(COLS - 1, c0));
+    return { r0, c0 };
+  }
+
+  let board = new Array(ROWS * COLS).fill(null);
+  let blocks = [];
+  let scores = { blue: 0, red: 0 };
+  let currentPlayer = 'blue';
+  let movesRemaining = 1;
+  let gameOver = false;
+  let winner = null;
+  let selectedSize = 1;
+  let orientation = 'vertical';
+  let hoverCell = null;
+  let lastMoveCells = [];
+  let history = [];
+  let passArmed = false;
+  let passArmTimer = null;
+  let mode = 'human';       // 'human' | 'bot' | 'online'
+  let botPlayer = 'red';    // which color the bot controls, when mode === 'bot'
+  let botDifficulty = 'medium';
+  let botThinking = false;
+
+  // Online play state
+  let myClientId = getOrCreateClientId();
+  let roomId = null;
+  let stateVersion = 0;
+  let roomBlueClientId = null;
+  let roomRedClientId = null;
+  let myColor = null;       // 'blue' | 'red' | 'spectator' | null (undecided)
+  let pollTimer = null;
+  let pushInFlight = false;
+
+  const boardEl = document.getElementById('board');
+  const statusMsgEl = document.getElementById('statusMsg');
+  const turnIndicatorEl = document.getElementById('turnIndicator');
+  const movesSubEl = document.getElementById('movesSub');
+  const scoreBlueNumEl = document.getElementById('scoreBlueNum');
+  const scoreRedNumEl = document.getElementById('scoreRedNum');
+  const scoreBlueBarEl = document.getElementById('scoreBlueBar');
+  const scoreRedBarEl = document.getElementById('scoreRedBar');
+  const pieceButtonsEl = document.getElementById('pieceButtons');
+  const undoBtn = document.getElementById('undoBtn');
+  const passBtn = document.getElementById('passBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const placeBtn = document.getElementById('placeBtn');
+  const opponentSelect = document.getElementById('opponentSelect');
+  const botColorSelect = document.getElementById('botColorSelect');
+  const difficultySelect = document.getElementById('difficultySelect');
+  const botOptionsEl = document.getElementById('botOptions');
+  const blueBotTagEl = document.getElementById('blueBotTag');
+  const redBotTagEl = document.getElementById('redBotTag');
+  const onlineOptionsEl = document.getElementById('onlineOptions');
+  const setupModeHintEl = document.getElementById('setupModeHint');
+  const roomInputEl = document.getElementById('roomInput');
+  const joinRoomBtn = document.getElementById('joinRoomBtn');
+  const roomLinkRowEl = document.getElementById('roomLinkRow');
+  const roomLinkFieldEl = document.getElementById('roomLinkField');
+  const copyLinkBtn = document.getElementById('copyLinkBtn');
+  const claimRowEl = document.getElementById('claimRow');
+  const claimBlueBtn = document.getElementById('claimBlueBtn');
+  const claimRedBtn = document.getElementById('claimRedBtn');
+  const onlineStatusEl = document.getElementById('onlineStatus');
+
+  function getOrCreateClientId() {
+    try {
+      let id = localStorage.getItem('canopy_client_id');
+      if (!id) {
+        id = 'c_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem('canopy_client_id', id);
+      }
+      return id;
+    } catch (e) {
+      return 'c_' + Math.random().toString(36).slice(2);
+    }
+  }
+
+  function idx(r, c) { return r * COLS + c; }
+
+  function neighborsInBounds(r, c) {
+    const out = [];
+    if (r > 0) out.push([r - 1, c]);
+    if (r < ROWS - 1) out.push([r + 1, c]);
+    if (c > 0) out.push([r, c - 1]);
+    if (c < COLS - 1) out.push([r, c + 1]);
+    return out;
+  }
+
+  function computeCells(size, orient, r0, c0) {
+    const cells = [];
+    for (let i = 0; i < size; i++) {
+      if (size === 1) cells.push([r0, c0]);
+      else if (orient === 'horizontal') cells.push([r0, c0 + i]);
+      else cells.push([r0 + i, c0]);
+    }
+    return cells;
+  }
+
+  function isLegalPlacement(player, size, orient, r0, c0) {
+    const cells = computeCells(size, orient, r0, c0);
+    for (const [r, c] of cells) {
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return { legal: false, reason: 'bounds' };
+    }
+    for (const [r, c] of cells) {
+      if (board[idx(r, c)] !== null) return { legal: false, reason: 'occupied' };
+    }
+    const edgeRow = EDGE_ROW[player];
+    let attached = cells.some(([r]) => r === edgeRow);
+    if (!attached) {
+      outer:
+      for (const [r, c] of cells) {
+        for (const [nr, nc] of neighborsInBounds(r, c)) {
+          const val = board[idx(nr, nc)];
+          if (val !== null && blocks[val].player === player && blocks[val].alive) {
+            attached = true;
+            break outer;
+          }
+        }
+      }
+    }
+    if (!attached) return { legal: false, reason: 'not-attached' };
+
+    const enemyPlayer = player === 'blue' ? 'red' : 'blue';
+    const touchedEnemies = new Set();
+    for (const [r, c] of cells) {
+      for (const [nr, nc] of neighborsInBounds(r, c)) {
+        const val = board[idx(nr, nc)];
+        if (val !== null && blocks[val].player === enemyPlayer && blocks[val].alive) {
+          touchedEnemies.add(val);
+        }
+      }
+    }
+    for (const enemyId of touchedEnemies) {
+      if (size > blocks[enemyId].size) return { legal: false, reason: 'would-die' };
+    }
+    return { legal: true, touchedEnemies };
+  }
+
+  function blocksAdjacent(a, b) {
+    for (const [r1, c1] of a.cells) {
+      for (const [r2, c2] of b.cells) {
+        if ((Math.abs(r1 - r2) === 1 && c1 === c2) || (Math.abs(c1 - c2) === 1 && r1 === r2)) return true;
+      }
+    }
+    return false;
+  }
+
+  function killBlock(b) {
+    b.alive = false;
+    for (const [r, c] of b.cells) board[idx(r, c)] = null;
+  }
+
+  function recomputeConnectivity(player) {
+    const myBlocks = blocks.filter(b => b.player === player && b.alive);
+    const edgeRow = EDGE_ROW[player];
+    const visited = new Set();
+    const queue = [];
+    for (const b of myBlocks) {
+      if (b.cells.some(([r]) => r === edgeRow)) { visited.add(b.id); queue.push(b); }
+    }
+    while (queue.length) {
+      const b = queue.shift();
+      for (const other of myBlocks) {
+        if (visited.has(other.id)) continue;
+        if (blocksAdjacent(b, other)) { visited.add(other.id); queue.push(other); }
+      }
+    }
+    for (const b of myBlocks) {
+      if (!visited.has(b.id)) killBlock(b);
+    }
+  }
+
+  function resolveCombatAndCascade(newBlock) {
+    const enemyPlayer = newBlock.player === 'blue' ? 'red' : 'blue';
+    const diedEnemies = new Set();
+    for (const [r, c] of newBlock.cells) {
+      for (const [nr, nc] of neighborsInBounds(r, c)) {
+        const val = board[idx(nr, nc)];
+        if (val !== null && blocks[val].player === enemyPlayer && blocks[val].alive && blocks[val].size > newBlock.size) {
+          diedEnemies.add(val);
+        }
+      }
+    }
+    for (const enemyId of diedEnemies) killBlock(blocks[enemyId]);
+    if (diedEnemies.size > 0) recomputeConnectivity(enemyPlayer);
+  }
+
+  function updateScores() {
+    scores.blue = blocks.filter(b => b.player === 'blue' && b.alive).reduce((s, b) => s + b.size, 0);
+    scores.red = blocks.filter(b => b.player === 'red' && b.alive).reduce((s, b) => s + b.size, 0);
+  }
+
+  // ---------- Bot support: simulate a placement, then exactly undo it ----------
+  function simulateApply(player, size, orient, r0, c0) {
+    const cells = computeCells(size, orient, r0, c0);
+    const id = blocks.length;
+    const block = { id, player, size, orientation: orient, cells, alive: true };
+    blocks.push(block);
+    for (const [r, c] of cells) board[idx(r, c)] = id;
+    const enemyPlayer = player === 'blue' ? 'red' : 'blue';
+    const beforeAlive = [];
+    for (const b of blocks) {
+      if (b.player === enemyPlayer) beforeAlive.push([b.id, b.alive]);
+    }
+    resolveCombatAndCascade(block);
+    updateScores();
+    return { newCells: cells, beforeAlive };
+  }
+
+  function simulateRevert(info) {
+    for (const [bid, wasAlive] of info.beforeAlive) {
+      const b = blocks[bid];
+      if (b.alive !== wasAlive) {
+        b.alive = wasAlive;
+        if (wasAlive) { for (const [r, c] of b.cells) board[idx(r, c)] = b.id; }
+      }
+    }
+    blocks.pop();
+    for (const [r, c] of info.newCells) board[idx(r, c)] = null;
+    updateScores();
+  }
+
+  function simulateAndRevert(player, size, orient, r0, c0) {
+    const info = simulateApply(player, size, orient, r0, c0);
+    const result = { blue: scores.blue, red: scores.red };
+    simulateRevert(info);
+    return result;
+  }
+
+  function enumerateLegalMoves(player) {
+    const moves = [];
+    for (let size = 1; size <= 5; size++) {
+      const orientations = size === 1 ? ['vertical'] : ['vertical', 'horizontal'];
+      for (const orient of orientations) {
+        for (let r0 = 0; r0 < ROWS; r0++) {
+          for (let c0 = 0; c0 < COLS; c0++) {
+            if (isLegalPlacement(player, size, orient, r0, c0).legal) {
+              moves.push({ size, orientation: orient, r0, c0 });
+            }
+          }
+        }
+      }
+    }
+    return moves;
+  }
+
+  function evaluateMoveBasic(player, size, orient, r0, c0) {
+    const enemyPlayer = player === 'blue' ? 'red' : 'blue';
+    const beforeEnemy = scores[enemyPlayer];
+    const after = simulateAndRevert(player, size, orient, r0, c0);
+    const enemyLoss = beforeEnemy - after[enemyPlayer];
+
+    const cells = computeCells(size, orient, r0, c0);
+    const cellKeySet = new Set(cells.map(([r, c]) => idx(r, c)));
+    const enemyEdgeRow = EDGE_ROW[enemyPlayer];
+    const hotCells = [];
+    for (const [r, c] of cells) {
+      for (const [nr, nc] of neighborsInBounds(r, c)) {
+        const key = idx(nr, nc);
+        if (cellKeySet.has(key) || board[key] !== null) continue;
+        const isEnemyEdge = nr === enemyEdgeRow;
+        let nearEnemyStructure = false;
+        for (const [nr2, nc2] of neighborsInBounds(nr, nc)) {
+          const v = board[idx(nr2, nc2)];
+          if (v !== null && blocks[v].player === enemyPlayer && blocks[v].alive) { nearEnemyStructure = true; break; }
+        }
+        if (isEnemyEdge || nearEnemyStructure) hotCells.push([nr, nc]);
+      }
+    }
+    const basicRisk = size > 1 ? hotCells.length * size * 0.5 : 0;
+    const score = size + enemyLoss * 1.8 - basicRisk;
+    return { size, orientation: orient, r0, c0, score, enemyLoss, hotCells };
+  }
+
+  function rankMoves(player) {
+    const legal = enumerateLegalMoves(player);
+    const scored = legal.map(m => evaluateMoveBasic(player, m.size, m.orientation, m.r0, m.c0));
+    scored.sort((a, b) => b.score - a.score);
+    return scored;
+  }
+
+  // ---------- Deep-search "Hard" bot ----------
+  // For each of a player's alive blocks, exactly how much total area would be lost if that
+  // one block were destroyed (its own size plus every block that depends on it to stay
+  // connected to the player's edge). Computed by brute-force removal + reachability, which
+  // is cheap at this board's scale and avoids subtle bugs in a hand-rolled articulation-point walk.
+  function computeCascadeValues(player) {
+    const myBlocks = blocks.filter(b => b.player === player && b.alive);
+    const edgeRow = EDGE_ROW[player];
+    const values = new Map();
+    for (const target of myBlocks) {
+      const remaining = myBlocks.filter(b => b.id !== target.id);
+      const visited = new Set();
+      const queue = [];
+      for (const b of remaining) {
+        if (b.cells.some(([r]) => r === edgeRow)) { visited.add(b.id); queue.push(b); }
+      }
+      while (queue.length) {
+        const b = queue.shift();
+        for (const other of remaining) {
+          if (visited.has(other.id)) continue;
+          if (blocksAdjacent(b, other)) { visited.add(other.id); queue.push(other); }
+        }
+      }
+      let lost = target.size;
+      for (const b of remaining) if (!visited.has(b.id)) lost += b.size;
+      values.set(target.id, lost);
+    }
+    return values;
+  }
+
+  // Empty cells, adjacent to the player's own highest-value blocks, that the opponent could
+  // legally reach right now (their edge, or their existing structure) — i.e. real attack lanes.
+  function myVulnerableCells(player) {
+    const cascadeVals = computeCascadeValues(player);
+    const myBlocks = blocks.filter(b => b.player === player && b.alive)
+      .sort((a, b) => (cascadeVals.get(b.id) || b.size) - (cascadeVals.get(a.id) || a.size))
+      .slice(0, 5);
+    const enemyPlayer = player === 'blue' ? 'red' : 'blue';
+    const enemyEdgeRow = EDGE_ROW[enemyPlayer];
+    const cellMap = new Map();
+    for (const b of myBlocks) {
+      const val = cascadeVals.get(b.id) || b.size;
+      for (const [r, c] of b.cells) {
+        for (const [nr, nc] of neighborsInBounds(r, c)) {
+          if (board[idx(nr, nc)] !== null) continue;
+          const isEnemyEdge = nr === enemyEdgeRow;
+          let nearEnemy = false;
+          for (const [nr2, nc2] of neighborsInBounds(nr, nc)) {
+            const v = board[idx(nr2, nc2)];
+            if (v !== null && blocks[v].player === enemyPlayer && blocks[v].alive) { nearEnemy = true; break; }
+          }
+          if (isEnemyEdge || nearEnemy) {
+            const key = idx(nr, nc);
+            const existing = cellMap.get(key);
+            if (!existing || val > existing.threatValue) cellMap.set(key, { r: nr, c: nc, threatValue: val });
+          }
+        }
+      }
+    }
+    return [...cellMap.values()].sort((a, b) => b.threatValue - a.threatValue).slice(0, 6);
+  }
+
+  // Greedy top-N by immediate score, plus (if useDefensive) the best legal move covering each
+  // of the player's most valuable vulnerable cells — so a good defensive move isn't missed just
+  // because it looked mediocre by raw area gain alone.
+  function selectCandidatesForDeepCheck(player, ranked, beamN, useDefensive) {
+    const chosen = [];
+    const seen = new Set();
+    const key = m => m.size + ':' + m.orientation + ':' + m.r0 + ':' + m.c0;
+    for (const m of ranked.slice(0, beamN)) { chosen.push(m); seen.add(key(m)); }
+    if (!useDefensive) return chosen;
+    for (const vc of myVulnerableCells(player)) {
+      for (const m of ranked) {
+        const cells = computeCells(m.size, m.orientation, m.r0, m.c0);
+        if (cells.some(([r, c]) => r === vc.r && c === vc.c)) {
+          if (!seen.has(key(m))) { chosen.push(m); seen.add(key(m)); }
+          break;
+        }
+      }
+    }
+    return chosen;
+  }
+
+  function positionValue(player) {
+    const enemy = player === 'blue' ? 'red' : 'blue';
+    return scores[player] - scores[enemy];
+  }
+
+  // Explores candidate full turns (1 or 2 placements) for `player`, fully reverting the board
+  // before returning. Result is sorted best-first by resulting position value (player's area
+  // minus opponent's area) at the leaf.
+  function bestOwnTurnSequences(player, numMoves, beamFirst, beamSecond, useDefensive) {
+    const ranked1 = rankMoves(player);
+    if (ranked1.length === 0) return [];
+    const candidates1 = selectCandidatesForDeepCheck(player, ranked1, beamFirst, useDefensive);
+    const sequences = [];
+    for (const m1 of candidates1) {
+      const info1 = simulateApply(player, m1.size, m1.orientation, m1.r0, m1.c0);
+      if (numMoves <= 1) {
+        sequences.push({ moves: [m1], value: positionValue(player) });
+      } else {
+        const ranked2 = rankMoves(player);
+        const top2 = selectCandidatesForDeepCheck(player, ranked2, beamSecond, useDefensive);
+        if (top2.length === 0) {
+          sequences.push({ moves: [m1], value: positionValue(player) });
+        } else {
+          for (const m2 of top2) {
+            const info2 = simulateApply(player, m2.size, m2.orientation, m2.r0, m2.c0);
+            sequences.push({ moves: [m1, m2], value: positionValue(player) });
+            simulateRevert(info2);
+          }
+        }
+      }
+      simulateRevert(info1);
+    }
+    sequences.sort((a, b) => b.value - a.value);
+    return sequences;
+  }
+
+  const HARD_BEAMS = { beamFirst: 12, beamSecond: 6, deepCheckCount: 8, replyBeamFirst: 5, replyBeamSecond: 3 };
+
+  // Picks the best move for the bot's NEXT single placement by looking at its full turn
+  // (1 or 2 placements, whatever movesRemaining allows), then — for the best few candidate
+  // turns — simulating the opponent's best full-turn reply, and choosing whichever of the
+  // bot's candidates leaves it best off *after* that reply. This is what catches "looks good
+  // now, gets punished next turn" moves that a one-move-deep heuristic can't see.
+  function chooseBotMoveStrong(player) {
+    const cfg = HARD_BEAMS;
+    const mySequences = bestOwnTurnSequences(player, movesRemaining, cfg.beamFirst, cfg.beamSecond, true);
+    if (mySequences.length === 0) return null;
+    const enemy = player === 'blue' ? 'red' : 'blue';
+    const toDeepCheck = mySequences.slice(0, cfg.deepCheckCount);
+    let best = null, bestNet = -Infinity;
+    for (const seq of toDeepCheck) {
+      const infos = seq.moves.map(mv => simulateApply(player, mv.size, mv.orientation, mv.r0, mv.c0));
+      const enemySequences = bestOwnTurnSequences(enemy, 2, cfg.replyBeamFirst, cfg.replyBeamSecond, true);
+      const enemyBestValue = enemySequences.length > 0 ? enemySequences[0].value : positionValue(enemy);
+      for (let i = infos.length - 1; i >= 0; i--) simulateRevert(infos[i]);
+      const net = -enemyBestValue;
+      if (net > bestNet) { bestNet = net; best = seq; }
+    }
+    return best.moves[0];
+  }
+
+  function chooseBotMove(player, difficulty) {
+    const legal = enumerateLegalMoves(player);
+    if (legal.length === 0) return null;
+    if (difficulty === 'easy') {
+      return legal[Math.floor(Math.random() * legal.length)];
+    }
+    if (difficulty === 'hard') {
+      return chooseBotMoveStrong(player);
+    }
+    const scored = rankMoves(player);
+    const topN = scored.slice(0, Math.min(6, scored.length));
+    return topN[Math.floor(Math.random() * topN.length)];
+  }
+
+  function isHumanTurn() {
+    if (mode === 'bot') return currentPlayer !== botPlayer;
+    if (mode === 'online') return myColor === currentPlayer;
+    return true;
+  }
+
+  // ---------- Online play: networking ----------
+  function randomRoomCode() {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L - easier to read aloud
+    let s = '';
+    for (let i = 0; i < 5; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }
+
+  async function apiGetRoom(id) {
+    const res = await fetch('/api/room?id=' + encodeURIComponent(id));
+    return res.json();
+  }
+
+  async function apiPostRoom(payload) {
+    const res = await fetch('/api/room', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  }
+
+  function setOnlineStatus(text) {
+    onlineStatusEl.textContent = text;
+  }
+
+  function updateUrlWithRoom(id) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', id);
+    window.history.replaceState(null, '', url.toString());
+    roomLinkFieldEl.value = url.toString();
+    roomLinkRowEl.style.display = 'flex';
+  }
+
+  function updateClaimUi() {
+    if (roomBlueClientId === myClientId) myColor = 'blue';
+    else if (roomRedClientId === myClientId) myColor = 'red';
+    else if (!roomBlueClientId || !roomRedClientId) myColor = null;
+    else myColor = 'spectator';
+
+    claimRowEl.style.display = myColor === null ? 'flex' : 'none';
+    claimBlueBtn.style.display = roomBlueClientId ? 'none' : 'inline-block';
+    claimRedBtn.style.display = roomRedClientId ? 'none' : 'inline-block';
+
+    if (myColor === 'blue') setOnlineStatus('Connected — you are playing Blue.');
+    else if (myColor === 'red') setOnlineStatus('Connected — you are playing Red.');
+    else if (myColor === 'spectator') setOnlineStatus('Connected — both seats are taken, you are watching.');
+    else setOnlineStatus('Connected — choose a side to play.');
+  }
+
+  function applyRoomRecord(data) {
+    if (!data || data.exists === false) return;
+    stateVersion = data.version;
+    roomBlueClientId = data.blueClientId;
+    roomRedClientId = data.redClientId;
+    if (data.state) applyRemoteState(data.state);
+    updateClaimUi();
+  }
+
+  function applyRemoteState(state) {
+    board = state.board;
+    blocks = state.blocks;
+    scores = state.scores;
+    currentPlayer = state.currentPlayer;
+    movesRemaining = state.movesRemaining;
+    gameOver = state.gameOver;
+    winner = state.winner;
+    lastMoveCells = state.lastMoveCells || [];
+    render();
+  }
+
+  async function joinOrCreateRoom(rawId) {
+    const id = (rawId || '').trim().toUpperCase() || randomRoomCode();
+    mode = 'online';
+    stopPolling();
+    setOnlineStatus('Connecting…');
+    try {
+      let data = await apiGetRoom(id);
+      if (!data.exists) data = await apiPostRoom({ id, action: 'create' });
+      if (data.error) { setOnlineStatus(data.error); return; }
+      roomId = id;
+      roomInputEl.value = id;
+      applyRoomRecord(data);
+      updateUrlWithRoom(id);
+      startPolling();
+    } catch (e) {
+      setOnlineStatus('Could not reach the server. Check your connection and try again.');
+    }
+  }
+
+  async function claimColor(color) {
+    if (!roomId) return;
+    try {
+      const data = await apiPostRoom({ id: roomId, action: 'claim', color, clientId: myClientId });
+      if (data.busy) { setTimeout(() => claimColor(color), 400); return; }
+      applyRoomRecord(data);
+    } catch (e) {
+      setOnlineStatus('Could not reach the server. Try again.');
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(pollOnce, 1500);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function pollOnce() {
+    if (!roomId || pushInFlight) return;
+    try {
+      const data = await apiGetRoom(roomId);
+      if (data.exists === false) { setOnlineStatus('This room has expired.'); stopPolling(); return; }
+      if (data.version > stateVersion) {
+        applyRoomRecord(data);
+      } else if (data.blueClientId !== roomBlueClientId || data.redClientId !== roomRedClientId) {
+        roomBlueClientId = data.blueClientId;
+        roomRedClientId = data.redClientId;
+        updateClaimUi();
+      }
+    } catch (e) {
+      setOnlineStatus('Connection lost — retrying…');
+    }
+  }
+
+  async function pushRoomState() {
+    if (!roomId) return;
+    pushInFlight = true;
+    const payload = { board, blocks, scores, currentPlayer, movesRemaining, gameOver, winner, lastMoveCells };
+    try {
+      const data = await apiPostRoom({ id: roomId, action: 'update', state: payload, expectedVersion: stateVersion });
+      if (data.busy) {
+        pushInFlight = false;
+        setTimeout(pushRoomState, 300);
+        return;
+      }
+      if (data.conflict) {
+        applyRoomRecord(data);
+        statusMsgEl.textContent = "Your move didn't sync — the board just changed. Try again.";
+      } else {
+        applyRoomRecord(data);
+      }
+    } catch (e) {
+      setOnlineStatus('Could not reach the server — will retry on the next sync.');
+    }
+    pushInFlight = false;
+  }
+
+  function afterLocalStateChange() {
+    if (mode === 'bot') { maybeTriggerBot(); return; }
+    if (mode === 'online') { pushRoomState(); }
+  }
+
+  function maybeTriggerBot() {
+    if (!gameOver && mode === 'bot' && currentPlayer === botPlayer && !botThinking) {
+      runBotTurn();
+    }
+  }
+
+  function runBotTurn() {
+    if (gameOver || mode !== 'bot' || currentPlayer !== botPlayer) return;
+    botThinking = true;
+    render();
+    setTimeout(() => {
+      const player = currentPlayer;
+      const move = chooseBotMove(player, botDifficulty);
+      pushHistory();
+      if (move === null) {
+        lastMoveCells = [];
+        advanceTurn();
+      } else {
+        const cells = computeCells(move.size, move.orientation, move.r0, move.c0);
+        const id = blocks.length;
+        const block = { id, player, size: move.size, orientation: move.size === 1 ? 'na' : move.orientation, cells, alive: true };
+        blocks.push(block);
+        for (const [r, c] of cells) board[idx(r, c)] = id;
+        resolveCombatAndCascade(block);
+        updateScores();
+        checkWin();
+        lastMoveCells = block.alive ? cells : [];
+        if (!gameOver) advanceTurn();
+      }
+      botThinking = false;
+      render();
+      if (!gameOver && mode === 'bot' && currentPlayer === botPlayer) {
+        runBotTurn();
+      }
+    }, 500);
+  }
+
+  function checkWin() {
+    if (scores.blue >= 100) { gameOver = true; winner = 'blue'; }
+    else if (scores.red >= 100) { gameOver = true; winner = 'red'; }
+  }
+
+  function advanceTurn() {
+    movesRemaining--;
+    if (movesRemaining <= 0) {
+      currentPlayer = currentPlayer === 'blue' ? 'red' : 'blue';
+      movesRemaining = 2;
+    }
+  }
+
+  function snapshot() {
+    return JSON.stringify({ board, blocks, scores, currentPlayer, movesRemaining, gameOver, winner, lastMoveCells });
+  }
+
+  function pushHistory() {
+    history.push(snapshot());
+    if (history.length > 300) history.shift();
+  }
+
+  function undo() {
+    if (history.length === 0 || botThinking || mode === 'online') return;
+    const snap = JSON.parse(history.pop());
+    board = snap.board;
+    blocks = snap.blocks;
+    scores = snap.scores;
+    currentPlayer = snap.currentPlayer;
+    movesRemaining = snap.movesRemaining;
+    gameOver = snap.gameOver;
+    winner = snap.winner;
+    lastMoveCells = snap.lastMoveCells;
+    disarmPass();
+    render();
+    afterLocalStateChange();
+  }
+
+  function selectSize(n) {
+    if (selectedSize === n) {
+      if (n > 1) orientation = orientation === 'vertical' ? 'horizontal' : 'vertical';
+    } else {
+      selectedSize = n;
+      orientation = 'vertical';
+    }
+    render();
+  }
+
+  function tryPlace() {
+    if (gameOver || botThinking || !isHumanTurn() || !hoverCell) return;
+    const { r0, c0 } = hoverCell;
+    const result = isLegalPlacement(currentPlayer, selectedSize, orientation, r0, c0);
+    if (!result.legal) {
+      flashInvalid(result.reason);
+      return;
+    }
+    pushHistory();
+    const cells = computeCells(selectedSize, orientation, r0, c0);
+    const id = blocks.length;
+    const block = { id, player: currentPlayer, size: selectedSize, orientation: selectedSize === 1 ? 'na' : orientation, cells, alive: true };
+    blocks.push(block);
+    for (const [r, c] of cells) board[idx(r, c)] = id;
+    resolveCombatAndCascade(block);
+    updateScores();
+    checkWin();
+    lastMoveCells = block.alive ? cells : [];
+    if (!gameOver) advanceTurn();
+    disarmPass();
+    render();
+    afterLocalStateChange();
+  }
+
+  function flashInvalid(reason) {
+    boardEl.classList.remove('shake');
+    void boardEl.offsetWidth;
+    boardEl.classList.add('shake');
+    const reasons = {
+      'bounds': "That piece would go off the board.",
+      'occupied': "That space is already occupied.",
+      'not-attached': "Must connect to your edge or one of your own pieces.",
+      'would-die': "That piece would be destroyed on contact — try a smaller piece or a different spot."
+    };
+    statusMsgEl.textContent = reasons[reason] || "Illegal move.";
+  }
+
+  function armPass() {
+    passArmed = true;
+    passBtn.textContent = 'Confirm pass?';
+    passBtn.classList.add('confirm');
+    clearTimeout(passArmTimer);
+    passArmTimer = setTimeout(disarmPass, 3500);
+  }
+
+  function disarmPass() {
+    passArmed = false;
+    passBtn.textContent = 'Pass';
+    passBtn.classList.remove('confirm');
+    clearTimeout(passArmTimer);
+  }
+
+  function doPass() {
+    if (gameOver || botThinking || !isHumanTurn()) return;
+    pushHistory();
+    lastMoveCells = [];
+    advanceTurn();
+    disarmPass();
+    render();
+    afterLocalStateChange();
+  }
+
+  function resetGame() {
+    const previousMode = mode;
+    board = new Array(ROWS * COLS).fill(null);
+    blocks = [];
+    scores = { blue: 0, red: 0 };
+    currentPlayer = 'blue';
+    movesRemaining = 1;
+    gameOver = false;
+    winner = null;
+    selectedSize = 1;
+    orientation = 'vertical';
+    hoverCell = null;
+    lastMoveCells = [];
+    history = [];
+    mode = opponentSelect.value;
+    botPlayer = botColorSelect.value;
+    botDifficulty = difficultySelect.value;
+    botThinking = false;
+    if (previousMode === 'online' && mode !== 'online') stopPolling();
+    disarmPass();
+    render();
+    afterLocalStateChange();
+  }
+
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // ---- DOM build ----
+  const cellEls = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row = [];
+    for (let c = 0; c < COLS; c++) {
+      const el = document.createElement('div');
+      el.className = 'cell';
+      boardEl.appendChild(el);
+      row.push(el);
+    }
+    cellEls.push(row);
+  }
+
+  const PIECE_SIZES = [1, 2, 3, 4, 5];
+  PIECE_SIZES.forEach(n => {
+    const btn = document.createElement('div');
+    btn.className = 'piece-btn';
+    btn.dataset.size = n;
+    btn.innerHTML = '<span class="size-label">1×' + n + '</span><span class="orient-label"></span>';
+    btn.addEventListener('click', () => selectSize(n));
+    pieceButtonsEl.appendChild(btn);
+  });
+
+  boardEl.addEventListener('mousemove', (e) => {
+    hoverCell = cellFromPoint(e.clientX, e.clientY);
+    render();
+  });
+  boardEl.addEventListener('mouseleave', () => { hoverCell = null; render(); });
+  boardEl.addEventListener('click', () => tryPlace());
+  boardEl.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    hoverCell = cellFromPoint(t.clientX, t.clientY);
+    render();
+    e.preventDefault();
+  }, { passive: false });
+  boardEl.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    hoverCell = cellFromPoint(t.clientX, t.clientY);
+    render();
+    e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key >= '1' && e.key <= '5') { selectSize(Number(e.key)); }
+    else if (e.key === 'Enter' || e.key === ' ') { tryPlace(); e.preventDefault(); }
+    else if (e.key === 'u' || e.key === 'U') { undo(); }
+  });
+
+  undoBtn.addEventListener('click', undo);
+  resetBtn.addEventListener('click', resetGame);
+  placeBtn.addEventListener('click', () => tryPlace());
+  passBtn.addEventListener('click', () => {
+    if (!passArmed) armPass();
+    else doPass();
+  });
+
+  function updateModeOptionsVisibility() {
+    const val = opponentSelect.value;
+    botOptionsEl.style.display = val === 'bot' ? 'flex' : 'none';
+    onlineOptionsEl.style.display = val === 'online' ? 'flex' : 'none';
+    setupModeHintEl.style.display = val === 'bot' ? 'block' : 'none';
+  }
+  opponentSelect.addEventListener('change', updateModeOptionsVisibility);
+  updateModeOptionsVisibility();
+
+  joinRoomBtn.addEventListener('click', () => joinOrCreateRoom(roomInputEl.value));
+  roomInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); joinOrCreateRoom(roomInputEl.value); }
+  });
+  claimBlueBtn.addEventListener('click', () => claimColor('blue'));
+  claimRedBtn.addEventListener('click', () => claimColor('red'));
+  copyLinkBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(roomLinkFieldEl.value);
+    } catch (e) {
+      roomLinkFieldEl.select();
+      try { document.execCommand('copy'); } catch (e2) { /* ignore */ }
+    }
+    const original = copyLinkBtn.textContent;
+    copyLinkBtn.textContent = 'Copied!';
+    setTimeout(() => { copyLinkBtn.textContent = original; }, 1500);
+  });
+
+  function initFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const urlRoom = params.get('room');
+    if (urlRoom) {
+      opponentSelect.value = 'online';
+      updateModeOptionsVisibility();
+      mode = 'online';
+      roomInputEl.value = urlRoom;
+      joinOrCreateRoom(urlRoom);
+    }
+  }
+
+  function sameBlock(r, c, id) {
+    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return false;
+    return board[idx(r, c)] === id;
+  }
+
+  function render() {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const el = cellEls[r][c];
+        let cls = 'cell';
+        if (r === ROWS - 1) cls += ' edge-blue-row';
+        if (r === 0) cls += ' edge-red-row';
+        const val = board[idx(r, c)];
+        if (val !== null) {
+          const blk = blocks[val];
+          cls += ' ' + blk.player;
+          el.className = cls;
+          const fill = blk.player === 'blue' ? 'var(--blue)' : 'var(--red)';
+          const outline = blk.player === 'blue' ? 'var(--blue-dim)' : 'var(--red-dim)';
+          el.style.borderTopColor = sameBlock(r - 1, c, val) ? fill : outline;
+          el.style.borderBottomColor = sameBlock(r + 1, c, val) ? fill : outline;
+          el.style.borderLeftColor = sameBlock(r, c - 1, val) ? fill : outline;
+          el.style.borderRightColor = sameBlock(r, c + 1, val) ? fill : outline;
+        } else {
+          el.className = cls;
+          el.style.borderTopColor = '';
+          el.style.borderBottomColor = '';
+          el.style.borderLeftColor = '';
+          el.style.borderRightColor = '';
+        }
+      }
+    }
+    for (const [r, c] of lastMoveCells) {
+      if (board[idx(r, c)] !== null) cellEls[r][c].classList.add('last-move');
+    }
+
+    let hoverResult = null;
+    const interactive = !gameOver && isHumanTurn() && !botThinking;
+    if (interactive && hoverCell) {
+      const { r0, c0 } = hoverCell;
+      const cells = computeCells(selectedSize, orientation, r0, c0);
+      hoverResult = isLegalPlacement(currentPlayer, selectedSize, orientation, r0, c0);
+      for (const [r, c] of cells) {
+        if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+        const el = cellEls[r][c];
+        if (hoverResult.legal) {
+          el.classList.add('ghost-legal', 'ghost-' + currentPlayer);
+        } else {
+          el.classList.add('ghost-illegal');
+        }
+      }
+    }
+    boardEl.classList.toggle('board-disabled', !interactive);
+
+    if (gameOver) {
+      statusMsgEl.textContent = '';
+    } else if (hoverResult && !hoverResult.legal) {
+      // status message set by flashInvalid on click attempts; show a soft hint on hover too
+      const hints = {
+        'bounds': "Off the board.",
+        'occupied': "Space occupied.",
+        'not-attached': "Not connected to your edge or structure.",
+        'would-die': "Would be destroyed on contact."
+      };
+      statusMsgEl.textContent = hints[hoverResult.reason] || '';
+    } else {
+      statusMsgEl.textContent = '';
+    }
+
+    if (gameOver) {
+      turnIndicatorEl.className = 'turn-indicator game-over';
+      turnIndicatorEl.innerHTML = (winner === 'blue' ? 'Blue' : 'Red') + ' wins!';
+      movesSubEl.textContent = '';
+      turnIndicatorEl.appendChild(movesSubEl);
+      movesSubEl.textContent = 'Final score ' + scores.blue + ' – ' + scores.red;
+    } else if (botThinking) {
+      turnIndicatorEl.className = 'turn-indicator ' + currentPlayer + ' thinking';
+      turnIndicatorEl.innerHTML = cap(currentPlayer) + ' is thinking…';
+      movesSubEl.textContent = '';
+      turnIndicatorEl.appendChild(movesSubEl);
+    } else {
+      turnIndicatorEl.className = 'turn-indicator ' + currentPlayer;
+      let label = cap(currentPlayer) + "'s move";
+      if (mode === 'online' && myColor === currentPlayer) label += ' (you)';
+      turnIndicatorEl.innerHTML = label;
+      movesSubEl.textContent = movesRemaining + (movesRemaining === 1 ? ' placement left' : ' placements left');
+      turnIndicatorEl.appendChild(movesSubEl);
+    }
+
+    blueBotTagEl.textContent = (mode === 'bot' && botPlayer === 'blue') ? 'BOT' : (mode === 'online' && myColor === 'blue') ? 'YOU' : '';
+    redBotTagEl.textContent = (mode === 'bot' && botPlayer === 'red') ? 'BOT' : (mode === 'online' && myColor === 'red') ? 'YOU' : '';
+
+    scoreBlueNumEl.textContent = scores.blue + ' / 100';
+    scoreRedNumEl.textContent = scores.red + ' / 100';
+    scoreBlueBarEl.style.width = Math.min(100, scores.blue) + '%';
+    scoreRedBarEl.style.width = Math.min(100, scores.red) + '%';
+
+    document.querySelectorAll('.piece-btn').forEach(btn => {
+      const n = Number(btn.dataset.size);
+      const active = n === selectedSize;
+      btn.classList.toggle('active', active);
+      const orientLabel = btn.querySelector('.orient-label');
+      if (n === 1) { orientLabel.textContent = ''; }
+      else if (active) { orientLabel.textContent = orientation === 'vertical' ? '\u2195 vertical' : '\u2194 horizontal'; }
+      else { orientLabel.textContent = '\u2195'; }
+    });
+
+    undoBtn.disabled = history.length === 0 || botThinking || mode === 'online';
+    undoBtn.style.opacity = undoBtn.disabled ? 0.5 : 1;
+    placeBtn.disabled = !interactive;
+    placeBtn.style.opacity = interactive ? 1 : 0.5;
+    passBtn.disabled = !interactive;
+    passBtn.style.opacity = interactive ? 1 : 0.5;
+  }
+
+  render();
+  maybeTriggerBot();
+  initFromUrl();
+})();
+</script>
+</body>
+</html>
